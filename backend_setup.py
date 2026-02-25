@@ -435,21 +435,63 @@ def generate_backend_from_workbench(config, project_path, app_container):
 
         print_success(f"✓ Rutas agregadas")
 
-    # ── Migraciones + Seeders ─────────────────────────────────────────────────
-    print_info("Ejecutando migraciones y seeders...")
+    # ── Migraciones ───────────────────────────────────────────────────────────
+    print_info("Ejecutando migraciones (migrate:fresh)...")
+    print(f"{Colors.CYAN}{'─' * 70}{Colors.END}")
 
-    result = subprocess.run(
-        ["docker", "exec", app_container, "php", "artisan", "migrate:fresh", "--seed"],
+    migration_result = subprocess.run(
+        ["docker", "exec", app_container, "php", "artisan", "migrate:fresh", "--force"],
         capture_output=True,
         text=True
     )
 
-    if result.returncode != 0:
-        print_error("❌ ERROR en migraciones/seeders:")
-        print(result.stderr)
+    # Mostrar stdout siempre (Laravel imprime el progreso aquí)
+    if migration_result.stdout.strip():
+        print(migration_result.stdout)
+
+    # Mostrar stderr siempre (warnings, notices y errores reales)
+    if migration_result.stderr.strip():
+        print(f"{Colors.YELLOW}[stderr]{Colors.END}")
+        print(migration_result.stderr)
+
+    print(f"{Colors.CYAN}{'─' * 70}{Colors.END}")
+
+    if migration_result.returncode != 0:
+        print_error("Migraciones FALLARON — revisa los errores arriba")
+        print_warning("Puedes corregir el problema y re-ejecutar manualmente:")
+        print(f"  docker exec {app_container} php artisan migrate:fresh --force")
         return False
     else:
-        print_success("✓ Migraciones y seeders ejecutados correctamente")
+        print_success("Migraciones ejecutadas correctamente")
+
+    # ── Seeders ───────────────────────────────────────────────────────────────
+    print_info("Ejecutando seeders (db:seed)...")
+    print(f"{Colors.CYAN}{'─' * 70}{Colors.END}")
+
+    seeder_result = subprocess.run(
+        ["docker", "exec", app_container, "php", "artisan", "db:seed", "--force"],
+        capture_output=True,
+        text=True
+    )
+
+    # Mostrar stdout siempre
+    if seeder_result.stdout.strip():
+        print(seeder_result.stdout)
+
+    # Mostrar stderr siempre
+    if seeder_result.stderr.strip():
+        print(f"{Colors.YELLOW}[stderr]{Colors.END}")
+        print(seeder_result.stderr)
+
+    print(f"{Colors.CYAN}{'─' * 70}{Colors.END}")
+
+    if seeder_result.returncode != 0:
+        print_error("Seeders FALLARON — revisa los errores arriba")
+        print_warning("Las migraciones SÍ corrieron. Puedes re-ejecutar solo los seeders:")
+        print(f"  docker exec {app_container} php artisan db:seed --force")
+        return False
+    else:
+        print_success("Seeders ejecutados correctamente")
 
     # Limpiar archivos temporales
     if os.path.exists(temp_output):

@@ -967,69 +967,139 @@ class {seeder_name} extends Seeder
         return None
 
     def _get_faker_value(self, col_name: str, col: Dict) -> str:
-        """Decide qué valor de Faker usar basándose en el nombre y tipo de la columna"""
+        """
+        Decide qué valor de Faker usar basándose en el nombre y tipo de la columna.
+        Primero detecta por palabras clave CONTENIDAS en el nombre (contains),
+        luego por tipo SQL. Nunca usa lexify — siempre genera palabras reales.
+        """
         name_lower = col_name.lower()
         col_type = col['type'].lower()
+        base_type = col_type.split('(')[0].strip()
 
-        # ── Por nombre de columna ──────────────────────────────────────────
-        if name_lower in ['nombre', 'name', 'first_name', 'nombre_completo']:
+        # ── Detección por palabras clave contenidas en el nombre ──────────
+        # Nombres / personas
+        if name_lower in ['nombre', 'name', 'nombre_completo', 'full_name', 'nombres']:
             return "$faker->firstName()"
-        if name_lower in ['apellido', 'apellidos', 'last_name']:
+        if 'apellido' in name_lower or name_lower in ['last_name', 'surname']:
             return "$faker->lastName()"
-        if name_lower in ['email', 'correo', 'correo_electronico']:
+        if name_lower in ['nombre_usuario', 'username', 'user_name', 'nick', 'alias']:
+            return "$faker->unique()->userName()"
+
+        # Contacto
+        if 'email' in name_lower or 'correo' in name_lower:
             return "$faker->unique()->safeEmail()"
-        if name_lower in ['telefono', 'phone', 'tel', 'celular', 'movil']:
+        if 'telefono' in name_lower or 'phone' in name_lower or 'celular' in name_lower \
+                or 'movil' in name_lower or name_lower in ['tel', 'fono']:
             return "$faker->phoneNumber()"
-        if name_lower in ['direccion', 'address', 'domicilio']:
-            return "$faker->address()"
-        if name_lower in ['ciudad', 'city']:
+
+        # Ubicación
+        if 'direccion' in name_lower or 'address' in name_lower or 'domicilio' in name_lower:
+            return "$faker->streetAddress()"
+        if 'ciudad' in name_lower or 'city' in name_lower:
             return "$faker->city()"
-        if name_lower in ['estado', 'state']:
+        if name_lower in ['estado', 'state', 'provincia', 'region']:
             return "$faker->state()"
-        if name_lower in ['pais', 'country']:
+        if 'pais' in name_lower or 'country' in name_lower:
             return "$faker->country()"
-        if name_lower in ['codigo_postal', 'cp', 'zip', 'postal_code']:
+        if 'postal' in name_lower or name_lower in ['cp', 'zip', 'codigo_postal']:
             return "$faker->postcode()"
-        if name_lower in ['descripcion', 'description', 'detalle', 'notas', 'observaciones', 'comentarios']:
-            return "$faker->sentence(10)"
-        if name_lower in ['titulo', 'title']:
-            return "$faker->sentence(4)"
-        if 'precio' in name_lower or 'price' in name_lower or 'costo' in name_lower or 'cost' in name_lower or 'monto' in name_lower or 'amount' in name_lower:
-            return "$faker->randomFloat(2, 10, 5000)"
-        if name_lower in ['edad', 'age']:
+        if 'colonia' in name_lower or 'barrio' in name_lower or 'neighborhood' in name_lower:
+            return "$faker->citySuffix() . ' ' . $faker->city()"
+        if 'municipio' in name_lower or 'delegacion' in name_lower:
+            return "$faker->city()"
+
+        # Credenciales
+        if 'password' in name_lower or 'contrasena' in name_lower or 'contrasenia' in name_lower:
+            return "bcrypt($faker->password(8, 16))"
+        if 'token' in name_lower or 'api_key' in name_lower:
+            return "$faker->sha256()"
+
+        # Dinero
+        if 'precio' in name_lower or 'price' in name_lower or 'costo' in name_lower \
+                or 'cost' in name_lower or 'monto' in name_lower or 'amount' in name_lower \
+                or 'tarifa' in name_lower or 'salario' in name_lower or 'sueldo' in name_lower \
+                or 'pago' in name_lower or 'total' in name_lower or 'subtotal' in name_lower \
+                or 'descuento' in name_lower or 'impuesto' in name_lower:
+            return "$faker->randomFloat(2, 10, 9999)"
+
+        # Fechas
+        if 'fecha' in name_lower or ('date' in name_lower and 'update' not in name_lower):
+            if 'nacimiento' in name_lower or 'birth' in name_lower:
+                return "$faker->date('Y-m-d', '-18 years')"
+            if 'inicio' in name_lower or 'start' in name_lower or 'alta' in name_lower:
+                return "$faker->dateTimeBetween('-1 year', 'now')->format('Y-m-d')"
+            if 'fin' in name_lower or 'end' in name_lower or 'vencimiento' in name_lower \
+                    or 'expir' in name_lower:
+                return "$faker->dateTimeBetween('now', '+2 years')->format('Y-m-d')"
+            return "$faker->date('Y-m-d')"
+
+        # Horas
+        if 'hora' in name_lower or ('time' in name_lower and 'datetime' not in name_lower
+                                    and 'timestamp' not in name_lower):
+            return "$faker->time('H:i:s')"
+
+        # Números / medidas
+        if 'edad' in name_lower or name_lower in ['age', 'years', 'anios']:
             return "$faker->numberBetween(1, 99)"
-        if 'url' in name_lower or 'imagen' in name_lower or 'foto' in name_lower or 'image' in name_lower:
-            return "$faker->imageUrl()"
-        if name_lower in ['uuid']:
+        if 'duracion' in name_lower or 'duration' in name_lower or 'minutos' in name_lower \
+                or 'minutes' in name_lower:
+            return "$faker->numberBetween(15, 120)"
+        if 'cantidad' in name_lower or 'quantity' in name_lower or 'stock' in name_lower \
+                or 'capacidad' in name_lower:
+            return "$faker->numberBetween(1, 500)"
+        if 'numero' in name_lower or 'number' in name_lower or 'num' == name_lower \
+                or 'folio' in name_lower:
+            return "$faker->numerify('####')"
+        if 'calificacion' in name_lower or 'rating' in name_lower or 'puntuacion' in name_lower \
+                or 'score' in name_lower:
+            return "$faker->numberBetween(1, 10)"
+        if 'porcentaje' in name_lower or 'percent' in name_lower:
+            return "$faker->numberBetween(0, 100)"
+
+        # Textos descriptivos
+        if 'descripcion' in name_lower or 'description' in name_lower or 'detalle' in name_lower \
+                or 'nota' in name_lower or 'observacion' in name_lower or 'comentario' in name_lower \
+                or 'resumen' in name_lower or 'biografia' in name_lower or 'bio' in name_lower:
+            return "$faker->sentence(12)"
+        if 'titulo' in name_lower or 'title' in name_lower or 'nombre' in name_lower:
+            return "$faker->sentence(3)"
+        if 'especialidad' in name_lower or 'specialty' in name_lower or 'profesion' in name_lower \
+                or 'profession' in name_lower or 'ocupacion' in name_lower or 'cargo' in name_lower \
+                or 'puesto' in name_lower or 'job' in name_lower or 'position' in name_lower:
+            return "$faker->jobTitle()"
+        if 'empresa' in name_lower or 'company' in name_lower or 'negocio' in name_lower \
+                or 'organizacion' in name_lower:
+            return "$faker->company()"
+        if 'categoria' in name_lower or 'category' in name_lower or 'tipo' in name_lower \
+                or 'type' in name_lower or 'clase' in name_lower:
+            return "$faker->randomElement(['Tipo A', 'Tipo B', 'Tipo C', 'Especial'])"
+        if 'estado' in name_lower or 'status' in name_lower or 'estatus' in name_lower:
+            return "$faker->randomElement(['activo', 'inactivo', 'pendiente'])"
+        if 'genero' in name_lower or 'gender' in name_lower or 'sexo' in name_lower:
+            return "$faker->randomElement(['masculino', 'femenino', 'otro'])"
+        if 'color' in name_lower:
+            return "$faker->colorName()"
+
+        # Media / archivos
+        if 'url' in name_lower or 'link' in name_lower or 'web' in name_lower \
+                or 'sitio' in name_lower:
+            return "$faker->url()"
+        if 'imagen' in name_lower or 'foto' in name_lower or 'image' in name_lower \
+                or 'photo' in name_lower or 'avatar' in name_lower:
+            return "$faker->imageUrl(640, 480)"
+        if 'archivo' in name_lower or 'file' in name_lower or 'documento' in name_lower:
+            return "$faker->lexify('doc_??????.pdf')"
+
+        # Identificadores únicos
+        if name_lower in ['uuid', 'guid']:
             return "$faker->uuid()"
         if name_lower in ['ip', 'ip_address']:
             return "$faker->ipv4()"
-        if name_lower in ['activo', 'active', 'habilitado', 'enabled']:
+        if 'activo' in name_lower or 'active' in name_lower or 'habilitado' in name_lower \
+                or 'enabled' in name_lower or 'visible' in name_lower:
             return "$faker->boolean()"
-        if 'token' in name_lower or 'password' in name_lower or 'contrasena' in name_lower:
-            return "bcrypt($faker->password())"
-        if name_lower in ['nombre_usuario', 'username', 'user_name']:
-            return "$faker->unique()->userName()"
-        if name_lower in ['sexo', 'genero', 'gender']:
-            return "$faker->randomElement(['masculino', 'femenino', 'otro'])"
-        if name_lower in ['color']:
-            return "$faker->colorName()"
-        if name_lower in ['tipo', 'type', 'categoria', 'category']:
-            return "$faker->word()"
-        if 'fecha' in name_lower or 'date' in name_lower:
-            if 'nacimiento' in name_lower or 'birth' in name_lower:
-                return "$faker->date('Y-m-d', '-18 years')"
-            if 'inicio' in name_lower or 'start' in name_lower:
-                return "$faker->dateTimeBetween('now', '+1 month')->format('Y-m-d')"
-            if 'fin' in name_lower or 'end' in name_lower or 'vencimiento' in name_lower:
-                return "$faker->dateTimeBetween('+1 month', '+1 year')->format('Y-m-d')"
-            return "$faker->date('Y-m-d')"
-        if 'hora' in name_lower or 'time' in name_lower:
-            return "$faker->time('H:i:s')"
 
-        # ── Por tipo de columna ────────────────────────────────────────────
-        base_type = col_type.split('(')[0].strip()
-
+        # ── Fallback por tipo SQL ─────────────────────────────────────────
         if base_type in ['int', 'integer', 'smallint', 'mediumint']:
             return "$faker->numberBetween(1, 100)"
         if base_type == 'bigint':
@@ -1037,12 +1107,18 @@ class {seeder_name} extends Seeder
         if base_type in ['decimal', 'float', 'double']:
             return "$faker->randomFloat(2, 1, 1000)"
         if base_type in ['varchar', 'char']:
+            # Usar palabras reales según el largo del campo
             length = col.get('length', '255')
             try:
-                max_len = min(int(length), 50) if length and str(length).isdigit() else 50
+                max_len = int(length) if length and str(length).isdigit() else 255
             except (ValueError, TypeError):
-                max_len = 50
-            return f"$faker->lexify(str_repeat('?', {max_len}))"
+                max_len = 255
+            if max_len <= 20:
+                return "$faker->word()"
+            elif max_len <= 60:
+                return "$faker->words(2, true)"
+            else:
+                return "$faker->words(3, true)"
         if base_type == 'text':
             return "$faker->paragraph()"
         if base_type in ['mediumtext', 'longtext']:
@@ -1051,17 +1127,15 @@ class {seeder_name} extends Seeder
             return "$faker->boolean()"
         if base_type == 'date':
             return "$faker->date('Y-m-d')"
-        if base_type == 'datetime':
-            return "$faker->dateTime()->format('Y-m-d H:i:s')"
-        if base_type == 'timestamp':
+        if base_type in ['datetime', 'timestamp']:
             return "$faker->dateTime()->format('Y-m-d H:i:s')"
         if base_type == 'time':
             return "$faker->time('H:i:s')"
         if base_type == 'json':
-            return "json_encode(['key' => $faker->word()])"
+            return "json_encode(['valor' => $faker->word(), 'descripcion' => $faker->sentence()])"
 
-        # Fallback
-        return "$faker->word()"
+        # Fallback final — siempre palabras reales
+        return "$faker->words(2, true)"
 
     def generate_database_seeder(self):
         """
